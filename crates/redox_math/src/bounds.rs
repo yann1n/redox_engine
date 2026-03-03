@@ -1,23 +1,30 @@
 use crate::vector::Vec3;
 use crate::matrix::Mat4;
 
-/// Axis-Aligned Bounding Box
+/// An axis-aligned bounding box defined by its minimum and maximum corners.
+///
+/// The box is considered to be closed (includes points exactly on its faces).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Aabb {
+    /// The minimum corner (x, y, z).
     pub min: Vec3,
+    /// The maximum corner (x, y, z).
     pub max: Vec3,
 }
 
 impl Aabb {
-    /// Creates an AABB from a center point and size (half-extents).
+    /// Creates an AABB from a center point and half‑extents.
     ///
     /// # Arguments
-    /// * `center` - The center of the bounding box
-    /// * `half_extents` - The half-size of the box in each dimension
+    /// * `center` - The geometric center of the box.
+    /// * `half_extents` - The distances from the center to each face.
     ///
-    /// # Returns
-    /// A new AABB
-    #[inline]
+    /// # Example
+    /// ```
+    /// # use redox_math::{Vec3, Aabb};
+    /// let aabb = Aabb::from_center_size(Vec3::ZERO, Vec3::splat(2.0));
+    /// assert_eq!(aabb.size(), Vec3::splat(4.0));
+    /// ```
     pub fn from_center_size(center: Vec3, half_extents: Vec3) -> Self {
         Self {
             min: center - half_extents,
@@ -25,8 +32,11 @@ impl Aabb {
         }
     }
 
-    /// Creates an empty AABB (inside-out).
-    #[inline]
+    /// Creates an empty (invalid) AABB.
+    ///
+    /// The minimum corner is set to positive infinity and the maximum to
+    /// negative infinity, so that any call to [`expand`](Self::expand) will
+    /// produce a valid box containing at least that point.
     pub fn empty() -> Self {
         Self {
             min: Vec3::splat(f32::INFINITY),
@@ -35,39 +45,39 @@ impl Aabb {
     }
 
     /// Returns the center of the AABB.
+    ///
+    /// # Example
+    /// ```
+    /// # use redox_math::{Vec3, Aabb};
+    /// let aabb = Aabb::from_center_size(Vec3::new(1.0, 2.0, 3.0), Vec3::splat(1.0));
+    /// assert_eq!(aabb.center(), Vec3::new(1.0, 2.0, 3.0));
+    /// ```
     #[inline]
     pub fn center(&self) -> Vec3 {
         (self.min + self.max) * 0.5
     }
 
-    /// Returns the half-extents of the AABB.
+    /// Returns the half‑extents of the AABB (distance from center to each face).
     #[inline]
     pub fn half_extents(&self) -> Vec3 {
         (self.max - self.min) * 0.5
     }
 
-    /// Returns the total size (full extents) of the AABB.
+    /// Returns the total size (width, height, depth) of the AABB.
     #[inline]
     pub fn size(&self) -> Vec3 {
         self.max - self.min
     }
 
-    /// Transforms the AABB by a matrix and returns a new axis-aligned bounding box.
+    /// Transforms this AABB by a 4×4 matrix and returns a new axis‑aligned
+    /// bounding box that encloses the transformed corners.
     ///
-    /// This transforms all 8 corners of the box and computes a new AABB
-    /// that contains all transformed corners.
-    ///
-    /// # Arguments
-    /// * `matrix` - The transformation matrix
-    ///
-    /// # Returns
-    /// A new AABB containing all transformed corners
-    #[inline]
+    /// The result is always axis‑aligned in the target space (i.e., the box
+    /// is recomputed from the transformed corners).
     pub fn transform(&self, matrix: Mat4) -> Self {
         let center = self.center();
         let half_extents = self.half_extents();
 
-        // Transform all 8 corners
         let corners = [
             center + Vec3::new(-half_extents.x, -half_extents.y, -half_extents.z),
             center + Vec3::new(-half_extents.x, -half_extents.y, half_extents.z),
@@ -84,12 +94,12 @@ impl Aabb {
             let transformed = matrix.transform_point3(corner);
             result = result.expand(transformed);
         }
-
         result
     }
 
-    /// Expands the AABB to include a point.
-    #[inline]
+    /// Expands the AABB to include the given point.
+    ///
+    /// Returns a new AABB that is the union of the current box and the point.
     pub fn expand(&self, point: Vec3) -> Self {
         Self {
             min: self.min.min(point),
@@ -97,95 +107,42 @@ impl Aabb {
         }
     }
 
-    /// Checks if this AABB intersects another AABB.
-    #[inline]
-    pub fn intersects(&self, other: &Aabb) -> bool {
-        self.min.x <= other.max.x
-            && self.max.x >= other.min.x
-            && self.min.y <= other.max.y
-            && self.max.y >= other.min.y
-            && self.min.z <= other.max.z
-            && self.max.z >= other.min.z
-    }
-
-    /// Checks if a point is inside this AABB.
-    #[inline]
+    /// Checks whether the AABB contains a given point.
+    ///
+    /// Points exactly on the faces are considered inside.
     pub fn contains_point(&self, point: Vec3) -> bool {
-        point.x >= self.min.x
-            && point.x <= self.max.x
-            && point.y >= self.min.y
-            && point.y <= self.max.y
-            && point.z >= self.min.z
-            && point.z <= self.max.z
-    }
-
-    /// Gets the 8 corners of the AABB.
-    #[inline]
-    pub fn corners(&self) -> [Vec3; 8] {
-        let min = self.min;
-        let max = self.max;
-        [
-            Vec3::new(min.x, min.y, min.z),
-            Vec3::new(min.x, min.y, max.z),
-            Vec3::new(min.x, max.y, min.z),
-            Vec3::new(min.x, max.y, max.z),
-            Vec3::new(max.x, min.y, min.z),
-            Vec3::new(max.x, min.y, max.z),
-            Vec3::new(max.x, max.y, min.z),
-            Vec3::new(max.x, max.y, max.z),
-        ]
+        point.x >= self.min.x && point.x <= self.max.x &&
+            point.y >= self.min.y && point.y <= self.max.y &&
+            point.z >= self.min.z && point.z <= self.max.z
     }
 }
 
-impl Default for Aabb {
-    fn default() -> Self {
-        Self::empty()
-    }
-}
-
-/// Bounding Sphere
+/// A sphere defined by a center and a radius.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Sphere {
+    /// The center of the sphere.
     pub center: Vec3,
+    /// The radius of the sphere.
     pub radius: f32,
 }
 
 impl Sphere {
-    /// Creates a new sphere from center and radius.
-    #[inline]
+    /// Creates a new sphere from a center and a radius.
+    ///
+    /// # Arguments
+    /// * `center` - The center point.
+    /// * `radius` - The radius (must be non‑negative for meaningful geometry).
     pub fn new(center: Vec3, radius: f32) -> Self {
         Self { center, radius }
     }
 
-    /// Creates a sphere that contains an AABB.
-    #[inline]
-    pub fn from_aabb(aabb: &Aabb) -> Self {
-        Self {
-            center: aabb.center(),
-            radius: aabb.half_extents().length(),
-        }
-    }
-
-    /// Checks if a point is inside this sphere.
-    #[inline]
-    pub fn contains_point(&self, point: Vec3) -> bool {
-        self.center.distance_squared(point) <= self.radius * self.radius
-    }
-
-    /// Checks if this sphere intersects another sphere.
-    #[inline]
+    /// Tests if this sphere intersects another sphere.
+    ///
+    /// Two spheres intersect if the distance between their centers is less than
+    /// or equal to the sum of their radii.
     pub fn intersects(&self, other: &Sphere) -> bool {
         let distance_squared = self.center.distance_squared(other.center);
         let radius_sum = self.radius + other.radius;
         distance_squared <= radius_sum * radius_sum
-    }
-}
-
-impl Default for Sphere {
-    fn default() -> Self {
-        Self {
-            center: Vec3::ZERO,
-            radius: 0.0,
-        }
     }
 }

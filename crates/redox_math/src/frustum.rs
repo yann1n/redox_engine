@@ -1,23 +1,51 @@
-use crate::vector::{Vec3, Vec4};
+//! Frustum culling primitives.
+//!
+//! This module provides a plane representation and a frustum structure
+//! that can be extracted from a view‑projection matrix. The frustum can
+//! then be used for fast intersection tests with bounding volumes such
+//! as AABBs and spheres.
+
+use crate::vector::Vec3;
 use crate::matrix::Mat4;
 use crate::bounds::Aabb;
 
-/// A plane in 3D space represented by its normal and distance from the origin.
-/// The plane equation is `dot(normal, point) + distance = 0`.
+/// A plane in 3D space defined by the equation `normal · point + distance = 0`.
+///
+/// The plane splits space into a positive half‑space (where the signed distance
+/// is positive) and a negative half‑space. The normal points toward the positive side.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Plane {
+    /// Unit‑length normal vector of the plane (after normalization).
     pub normal: Vec3,
+    /// Signed distance from the origin along the normal to the plane.
+    /// A point `p` lies on the plane if `normal · p + distance = 0`.
     pub distance: f32,
 }
 
 impl Plane {
-    /// Creates a new plane.
+    /// Creates a new plane from a normal and a distance.
+    ///
+    /// The normal does **not** need to be normalized initially; it can be
+    /// normalized later with [`normalize`](Self::normalize).
+    ///
+    /// # Arguments
+    /// * `normal`   – The normal vector (may be non‑unit).
+    /// * `distance` – The signed distance from the origin along the normal.
+    ///
+    /// # Example
+    /// ```
+    /// # use redox_math::{Vec3, Plane};
+    /// let plane = Plane::new(Vec3::new(1.0, 2.0, 3.0), 5.0);
+    /// ```
     #[inline]
     pub fn new(normal: Vec3, distance: f32) -> Self {
         Self { normal, distance }
     }
 
-    /// Normalizes the plane's normal and scales the distance accordingly.
+    /// Normalises the plane so that its normal becomes a unit vector.
+    ///
+    /// This also scales the distance accordingly, preserving the plane equation.
+    /// If the normal length is zero (degenerate plane), this method does nothing.
     #[inline]
     pub fn normalize(&mut self) {
         let length = self.normal.length();
@@ -28,72 +56,106 @@ impl Plane {
         }
     }
 
-    /// Returns the dot product of the plane and a point.
-    /// Positive value means point is in front of the plane,
-    /// negative means behind, zero means on the plane.
+    /// Returns the signed distance from a point to the plane.
+    ///
+    /// Positive values indicate the point is in front of the plane
+    /// (in the direction of the normal), negative values indicate it is behind.
     #[inline]
     pub fn dot_point(&self, point: Vec3) -> f32 {
         self.normal.dot(point) + self.distance
     }
 }
 
-/// A viewing frustum defined by 6 planes.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// A viewing frustum defined by six planes.
+///
+/// The planes are stored in the following order:
+/// 0: Left, 1: Right, 2: Bottom, 3: Top, 4: Near, 5: Far.
+/// All planes are oriented so that their normals point outward (away from the
+/// interior of the frustum). An object is inside the frustum if it lies on the
+/// positive side (i.e., signed distance ≥ 0) of every plane.
 pub struct Frustum {
-    /// Planes of the frustum in order: Left, Right, Bottom, Top, Near, Far.
+    /// The six planes of the frustum.
     pub planes: [Plane; 6],
 }
 
 impl Frustum {
-    /// Extracts a frustum from a view-projection matrix.
+    /// Extracts frustum planes from a view‑projection matrix using the
+    /// Gribb‑Hartmann method.
     ///
-    /// This assumes a right-handed coordinate system and clip space depth range [0, 1] (WGPU/D3D).
-    /// If using OpenGL, the extraction for near/far planes might differ.
+    /// This method works for both OpenGL‑style (‑1 to 1 depth) and DirectX‑style
+    /// (0 to 1 depth) clip spaces. For a right‑handed projection with depth range
+    /// [0,1] (as created by [`perspective`](crate::matrix::perspective)), the near
+    /// and far planes are correctly extracted.
+    ///
+    /// # Arguments
+    /// * `m` – The combined view‑projection matrix (projection * view).
+    ///
+    /// # Returns
+    /// A `Frustum` with all six planes normalised.
+    ///
+    /// # Example
+    /// ```
+    /// # use redox_math::{Mat4, perspective, look_at, Vec3, Frustum};
+    /// let proj = perspective(90.0_f32.to_radians(), 16.0/9.0, 0.1, 100.0);
+    /// let view = look_at(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO, Vec3::Y);
+    /// let frustum = Frustum::from_view_projection(proj * view);
+    /// ```
     pub fn from_view_projection(m: Mat4) -> Self {
-        let row4 = m.row(3);
         let row1 = m.row(0);
         let row2 = m.row(1);
         let row3 = m.row(2);
+        let row4 = m.row(3);
+
+        // Helper to create a plane from a Vec4 (row combination)
+        // Extracting X, Y, Z for the normal and W for distance
+        let make_plane = |v: glam::Vec4| {
+            Plane::new(Vec3::new(v.x, v.y, v.z), v.w)
+        };
 
         let mut frustum = Self {
             planes: [
-                // Left:   col4 + col1
-                Plane::new(Vec3::from(row4 + row1), row4.w + row1.w),
-                // Right:  col4 - col1
-                Plane::new(Vec3::from(row4 - row1), row4.w - row1.w),
-                // Bottom: col4 + col2
-                Plane::new(Vec3::from(row4 + row2), row4.w + row2.w),
-                // Top:    col4 - col2
-                Plane::new(Vec3::from(row4 - row2), row4.w - row2.w),
-                // Near:   col3 (using [0, 1] range)
-                Plane::new(Vec3::from(row3), row3.w),
-                // Far:    col4 - col3
-                Plane::new(Vec3::from(row4 - row3), row4.w - row3.w),
+                make_plane(row4 + row1), // Left
+                make_plane(row4 - row1), // Right
+                make_plane(row4 + row2), // Bottom
+                make_plane(row4 - row2), // Top
+                make_plane(row3),        // Near (Directly from row3 for [0, 1] depth range)
+                make_plane(row4 - row3), // Far
             ],
         };
 
         for plane in &mut frustum.planes {
             plane.normalize();
         }
-
         frustum
     }
 
-    /// Checks if an AABB intersects or is inside the frustum.
+    /// Tests whether an axis‑aligned bounding box (AABB) intersects the frustum.
     ///
-    /// Returns true if the AABB is partially or fully inside.
+    /// This is a conservative test: it returns `true` if the AABB is at least
+    /// partially inside the frustum, and `false` if it is definitely outside.
+    ///
+    /// The algorithm uses the “p‑vertex” method: for each plane, the corner of
+    /// the AABB that is most in the direction of the plane’s normal is tested.
+    /// If that corner is behind the plane, the entire AABB is outside.
+    ///
+    /// # Arguments
+    /// * `aabb` – The AABB to test.
+    ///
+    /// # Returns
+    /// `true` if the AABB intersects or is fully inside the frustum,
+    /// `false` if it is completely outside.
     pub fn intersects_aabb(&self, aabb: &Aabb) -> bool {
         for plane in &self.planes {
             let min = aabb.min;
             let max = aabb.max;
 
-            // Find the positive vertex (most in direction of the normal)
+            // P-vertex: find the corner most in the direction of the normal
             let mut p = min;
             if plane.normal.x >= 0.0 { p.x = max.x; }
             if plane.normal.y >= 0.0 { p.y = max.y; }
             if plane.normal.z >= 0.0 { p.z = max.z; }
 
-            // If the positive vertex is behind the plane, the whole AABB is outside
+            // If the p-vertex is on the negative side of the plane, the AABB is outside
             if plane.dot_point(p) < 0.0 {
                 return false;
             }

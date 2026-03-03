@@ -1,66 +1,77 @@
 use crate::vector::Vec3;
 use crate::quat::Quat;
 
-/// 4x4 column-major matrix type alias
+/// A 4×4 column‑major matrix.
+///
+/// This is a re‑export of [`glam::Mat4`]. Use it for transformations,
+/// projections, and view matrices.
 pub type Mat4 = glam::Mat4;
 
 /// Creates a transformation matrix from translation, rotation, and scale.
 ///
-/// The resulting matrix combines: T * R * S (scale first, then rotation, then translation)
+/// The transformation order is: scale first, then rotation, then translation.
+/// This matches the typical `T * R * S` convention used in many graphics
+/// applications.
 ///
 /// # Arguments
-/// * `translation` - The translation vector
-/// * `rotation` - The rotation quaternion
-/// * `scale` - The scale vector
+/// * `translation` - The translation vector.
+/// * `rotation`    - The rotation quaternion.
+/// * `scale`       - The scale factors.
 ///
-/// # Returns
-/// A 4x4 transformation matrix
+/// # Example
+/// ```
+/// # use redox_math::{Vec3, Quat, transform_matrix};
+/// let translation = Vec3::new(1.0, 2.0, 3.0);
+/// let rotation = Quat::from_rotation_y(45.0_f32.to_radians());
+/// let scale = Vec3::splat(2.0);
+/// let mat = transform_matrix(translation, rotation, scale);
+/// ```
 #[inline]
 pub fn transform_matrix(translation: Vec3, rotation: Quat, scale: Vec3) -> Mat4 {
     Mat4::from_scale_rotation_translation(scale, rotation, translation)
 }
 
-/// Creates a view matrix looking at a target.
+/// Creates a right‑handed view matrix (look‑at).
 ///
 /// # Arguments
-/// * `eye` - The position of the camera
-/// * `target` - The position to look at
-/// * `up` - The up direction
+/// * `eye`    - The position of the camera.
+/// * `target` - The point the camera is looking at.
+/// * `up`     - The up direction (usually `Vec3::Y`).
 ///
 /// # Returns
-/// A view matrix (right-handed)
+/// A matrix that transforms world space to view space (right‑handed).
 #[inline]
 pub fn look_at(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {
     Mat4::look_at_rh(eye, target, up)
 }
 
-/// Creates a perspective projection matrix.
+/// Creates a right‑handed perspective projection matrix.
 ///
 /// # Arguments
-/// * `fov_radians` - Vertical field of view in radians
-/// * `aspect_ratio` - Width / Height
-/// * `near` - Near plane distance
-/// * `far` - Far plane distance
+/// * `fov_radians`   - The vertical field of view in radians.
+/// * `aspect_ratio`  - The aspect ratio (width / height).
+/// * `near`          - Distance to the near clipping plane.
+/// * `far`           - Distance to the far clipping plane.
 ///
 /// # Returns
-/// A perspective projection matrix (right-handed, reversed Z)
+/// A perspective projection matrix (right‑handed, depth range [0,1]).
 #[inline]
 pub fn perspective(fov_radians: f32, aspect_ratio: f32, near: f32, far: f32) -> Mat4 {
     Mat4::perspective_rh(fov_radians, aspect_ratio, near, far)
 }
 
-/// Creates an orthographic projection matrix.
+/// Creates a right‑handed orthographic projection matrix.
 ///
 /// # Arguments
-/// * `left` - Left plane
-/// * `right` - Right plane
-/// * `bottom` - Bottom plane
-/// * `top` - Top plane
-/// * `near` - Near plane
-/// * `far` - Far plane
+/// * `left`   - Coordinate of the left clipping plane.
+/// * `right`  - Coordinate of the right clipping plane.
+/// * `bottom` - Coordinate of the bottom clipping plane.
+/// * `top`    - Coordinate of the top clipping plane.
+/// * `near`   - Distance to the near clipping plane.
+/// * `far`    - Distance to the far clipping plane.
 ///
 /// # Returns
-/// An orthographic projection matrix (right-handed)
+/// An orthographic projection matrix (right‑handed, depth range [0,1]).
 #[inline]
 pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
     Mat4::orthographic_rh(left, right, bottom, top, near, far)
