@@ -1,0 +1,19 @@
+[package]
+name = "redox_ecs"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/ecs.rs"
+
+[dependencies]
+# Используем общие версии из workspace
+glam = { workspace = true }
+rayon = { workspace = true }
+smallvec = { workspace = true }
+crossbeam-queue = { workspace = true }
+log = { workspace = true }
+
+# Дополнительные инструменты для эффективной ECS
+hashbrown = "0.14" # Быстрые хэш-карты
+parking_lot = "0.12" # Быстрые мьютексы
