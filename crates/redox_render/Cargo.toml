@@ -1,0 +1,28 @@
+[package]
+name = "redox_render"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Internal crates
+redox_math = { path = "../redox_math" }
+redox_ecs = { path = "../redox_ecs" }
+
+# Graphics
+wgpu = { workspace = true }
+winit = { workspace = true }
+
+# Data & serialization
+bytemuck = { workspace = true }
+image = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# Model loading
+tobj = "4.0"
+
+# Blocking async init
+pollster = "0.4"

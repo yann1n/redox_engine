@@ -1,0 +1,33 @@
+//! Helpers for creating `wgpu` buffers.
+
+use wgpu::util::DeviceExt;
+
+/// Creates a vertex buffer initialised with `data`.
+pub fn create_vertex_buffer(device: &wgpu::Device, label: &str, data: &[u8]) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(label),
+        contents: data,
+        usage: wgpu::BufferUsages::VERTEX,
+    })
+}
+
+/// Creates an index buffer initialised with `data`.
+pub fn create_index_buffer(device: &wgpu::Device, label: &str, data: &[u8]) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(label),
+        contents: data,
+        usage: wgpu::BufferUsages::INDEX,
+    })
+}
+
+/// Creates a uniform buffer initialised with `data`.
+///
+/// The buffer is created with both `UNIFORM` and `COPY_DST` usages so that
+/// it can be updated each frame via `Queue::write_buffer`.
+pub fn create_uniform_buffer(device: &wgpu::Device, label: &str, data: &[u8]) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(label),
+        contents: data,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    })
+}
